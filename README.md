@@ -1,1 +1,1 @@
-Folder [mapping_and_calling](https://github.com/jbergman/mammal_traits/tree/main/mapping_and_calling) contains a [gwf](https://gwf.app/) workflow used for downloading reference assemblies and short read data, mapping, calling and genotyping.
+Folder [mapping_and_calling](https://github.com/jbergman/mammal_traits/tree/main/mapping_and_calling) contains a [gwf](https://gwf.app/) workflow, and associated files, used for downloading reference assemblies and short read data, mapping, calling and genotyping data, as well as running PSMC.
