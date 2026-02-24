@@ -71,7 +71,6 @@ for _, row in supp.iterrows():
                 "REFERENCE_FOLDER": ref_accession,
                 "IND_ID":           sra,
                 "fastq_ftp":        sra,
-                "fastq_md5":        "",
                 "R1_or_R2":         strand,
             })
 
@@ -142,17 +141,8 @@ for i in range(references.shape[0]):
                                  out  = os.path.join(ref_out, "ref", ref_fname),
                                  done = os.path.join(ref_out, "done", jobid_download_ref)))
 
-    ## A.2. Mask reference (uncomment if needed; expects masked_regions.bed in ref/)
-    # jobid_mask_reference = "mask_reference_" + references.ref_genome_name[i].replace("-", "_")
-    # gwf.target_from_template(jobid_mask_reference,
-    #                          mask_reference(
-    #                              input     = os.path.join(ref_out, "ref", ref_fname),
-    #                              bed       = os.path.join(ref_out, "ref", "masked_regions.bed"),
-    #                              output    = os.path.join(ref_out, "ref", ref_fname[:-4] + "_masked.fna"),
-    #                              done_prev = os.path.join(ref_out, "done", jobid_download_ref),
-    #                              done      = os.path.join(ref_out, "done", jobid_mask_reference)))
 
-    ## A.3. Cut contigs shorter than 1000 bp
+    ## A.2. Cut contigs shorter than 1000 bp
     jobid_cut_contigs = "cut_contigs_" + references.ref_genome_name[i].replace("-", "_")
     gwf.target_from_template(jobid_cut_contigs,
                              cut_contigs(
@@ -164,7 +154,7 @@ for i in range(references.shape[0]):
                                  # done_prev= os.path.join(ref_out, "done", jobid_mask_reference),             # if masked
                                  done       = os.path.join(ref_out, "done", jobid_cut_contigs)))
 
-    ## A.4. Build BWA and faidx indices
+    ## A.3. Build BWA and faidx indices
     jobid_make_fasta = "make_fasta_" + references.ref_genome_name[i].replace("-", "_")
     gwf.target_from_template(jobid_make_fasta,
                              make_fasta(
@@ -173,7 +163,7 @@ for i in range(references.shape[0]):
                                  done_prev = os.path.join(ref_out, "done", jobid_cut_contigs),
                                  done      = os.path.join(ref_out, "done", jobid_make_fasta)))
 
-    ## A.5. Make regions file (used for coverage calculation in C.6)
+    ## A.4. Make regions file (used for coverage calculation in C.6)
     jobid_make_regions = "make_regions_" + references.ref_genome_name[i].replace("-", "_")
     gwf.target_from_template(jobid_make_regions,
                              make_regions(
@@ -182,8 +172,7 @@ for i in range(references.shape[0]):
                                  input      = ref_fname,
                                  done_prev  = os.path.join(ref_out, "done", jobid_make_fasta),
                                  done       = os.path.join(ref_out, "done", jobid_make_regions)))
-
-
+    
 """
 ------------------------------------------------------------------------------------------------------------------------
 B. SAMPLE DOWNLOAD AND PREPARATION FOR MAPPING
@@ -201,14 +190,13 @@ for i in range(species_and_refs.shape[0]):
     for ind in inds:
         data_subset = data.loc[data.IND_ID == ind]
 
-        ## B.1. Download fastq files per individual (with MD5 verification)
+        ## B.1. Download fastq files per individual
         jobid_download_per_individual = f"download_per_individual_{group}_{ind}"
         gwf.target_from_template(jobid_download_per_individual,
                                  download_per_individual(
                                      group          = group,
                                      ind            = ind,
                                      run_accessions = ",".join(list(data_subset.fastq_ftp.drop_duplicates())),
-                                     md5s           = ",".join(list(data_subset.fastq_md5.drop_duplicates())),
                                      outputs_dir    = OUTPUTS_DIR,
                                      done           = os.path.join(outdir(group), "done",
                                                                    jobid_download_per_individual)))
@@ -218,7 +206,6 @@ for i in range(species_and_refs.shape[0]):
             jobid_concat_or_rename_fastqs = f"concat_or_rename_fastqs_{group}_{ind}"
             gwf.target_from_template(jobid_concat_or_rename_fastqs,
                                      concatfastqs(
-                                         group          = group,
                                          ind            = ind,
                                          fastqs_1       = [os.path.join(outdir(group), "fastq",
                                                             data_subset.loc[data_subset.R1_or_R2 == "R1"].fastq_ftp.iloc[jj].split("/")[-1])
@@ -235,7 +222,6 @@ for i in range(species_and_refs.shape[0]):
             jobid_concat_or_rename_fastqs = f"concat_or_rename_fastqs_{group}_{ind}"
             gwf.target_from_template(jobid_concat_or_rename_fastqs,
                                      renamefastqs(
-                                         group          = group,
                                          ind            = ind,
                                          fastq_1        = os.path.join(outdir(group), "fastq",
                                                            data_subset.loc[data_subset.R1_or_R2 == "R1"].fastq_ftp.iloc[0].split("/")[-1]),
@@ -251,7 +237,6 @@ for i in range(species_and_refs.shape[0]):
         jobid_makeuBAM = f"makeuBAM_{group}_{ind}"
         gwf.target_from_template(jobid_makeuBAM,
                                  makeuBAM(
-                                     group          = group,
                                      ind            = ind,
                                      fastq1         = os.path.join(outdir(group), "fastq", f"{ind}_R1.fastq.gz"),
                                      fastq2         = os.path.join(outdir(group), "fastq", f"{ind}_R2.fastq.gz"),
@@ -264,7 +249,6 @@ for i in range(species_and_refs.shape[0]):
         jobid_splituBAM = f"splituBAM_{group}_{ind}"
         gwf.target_from_template(jobid_splituBAM,
                                  splituBAM(
-                                     group          = group,
                                      ind            = ind,
                                      species_outdir = outdir(group),
                                      prev_done      = [os.path.join(outdir(group), "done", jobid_makeuBAM)],
@@ -308,7 +292,6 @@ for i in range(species_and_refs.shape[0]):
             jobid_markadapt = f"markadapt_{group}_{ind}_{shard}"
             gwf.target_from_template(jobid_markadapt,
                                      markadapt(
-                                         group          = group,
                                          ind            = ind,
                                          shard          = shard,
                                          species_outdir = outdir(group),
@@ -321,7 +304,6 @@ for i in range(species_and_refs.shape[0]):
             jobid_mapBAM = f"mapBAM_{group}_{ind}_{shard}"
             gwf.target_from_template(jobid_mapBAM,
                                      mapBAM(
-                                         group          = group,
                                          ind            = ind,
                                          shard          = shard,
                                          ref            = ref_path,
@@ -335,7 +317,6 @@ for i in range(species_and_refs.shape[0]):
         jobid_mergeBAMs = f"mergeBAMs_{group}_{ind}"
         gwf.target_from_template(jobid_mergeBAMs,
                                  mergeBAMs(
-                                     group          = group,
                                      ind            = ind,
                                      bams           = [os.path.join(outdir(group), "bam",
                                                         f"split_uBAM{ind}",
@@ -351,7 +332,6 @@ for i in range(species_and_refs.shape[0]):
         jobid_markduplicates = f"markduplicates_{group}_{ind}"
         gwf.target_from_template(jobid_markduplicates,
                                  markduplicates(
-                                     group          = group,
                                      ind            = ind,
                                      species_outdir = outdir(group),
                                      prev_done      = [os.path.join(outdir(group), "done", jobid_mergeBAMs)],
@@ -361,7 +341,6 @@ for i in range(species_and_refs.shape[0]):
         jobid_coordsort = f"coordsort_{group}_{ind}"
         gwf.target_from_template(jobid_coordsort,
                                  coordsort(
-                                     group          = group,
                                      ind            = ind,
                                      species_outdir = outdir(group),
                                      prev_done      = [os.path.join(outdir(group), "done", jobid_markduplicates)],
@@ -380,7 +359,6 @@ for i in range(species_and_refs.shape[0]):
             jobid_cov = f"cov_{group}_{ind}"
             gwf.target_from_template(jobid_cov,
                                      cov(
-                                         group          = group,
                                          ind            = ind,
                                          regions        = regions_list,
                                          chromosomes    = chrom_list,
@@ -390,36 +368,12 @@ for i in range(species_and_refs.shape[0]):
                                          prev_done      = [os.path.join(outdir(group), "done", jobid_coordsort)],
                                          done           = os.path.join(outdir(group), "done", jobid_cov)))
 
-        ## C.7. Alternative batched coverage (uncomment if C.6 times out for large references)
-        # no_regions_per_batch = 10000
-        # cov_done_files = []
-        # for b in range(len(regions_list) // no_regions_per_batch):
-        #     jobid_cov_batched = f"cov_{group}_{ind}_batch_{b}"
-        #     cov_done_files.append(os.path.join(outdir(group), "done", jobid_cov_batched))
-        #     gwf.target_from_template(jobid_cov_batched,
-        #                              cov_batched(
-        #                                  group          = group,
-        #                                  ind            = ind,
-        #                                  batch          = b,
-        #                                  regions        = regions_list[b*no_regions_per_batch:(b+1)*no_regions_per_batch],
-        #                                  chromosomes    = chrom_list[b*no_regions_per_batch:(b+1)*no_regions_per_batch],
-        #                                  starts         = start_list[b*no_regions_per_batch:(b+1)*no_regions_per_batch],
-        #                                  ends           = end_list[b*no_regions_per_batch:(b+1)*no_regions_per_batch],
-        #                                  species_outdir = outdir(group),
-        #                                  prev_done      = [os.path.join(outdir(group), "done", jobid_coordsort)],
-        #                                  done           = os.path.join(outdir(group), "done", jobid_cov_batched)))
-        # b = b + 1
-        # ...  (add last partial batch following the same pattern)
-
-
 """
 ------------------------------------------------------------------------------------------------------------------------
 D. PSMC INFERENCE
 ------------------------------------------------------------------------------------------------------------------------
 PSMC is run per individual using the coordinate-sorted, duplicate-marked BAM.
 Prerequisites per individual: cov done file, coordsort done file.
-The intersect_35_90.bed accessibility mask must be present at:
-  <outputs>/<REFERENCE_FOLDER>/ref/intersect_35_90.bed
 
 Coverage is read from <outputs>/<FOLDER>/cov/<IND_ID>.cov (column 7, 0-indexed col 6).
 Individuals are sourced from samples_coverage_stats.txt in the reference ref/ folder;
@@ -478,7 +432,6 @@ for i in range(species_and_refs.shape[0]):
                                      ref  = ref_path,
                                      bam  = os.path.join(outdir(group), "bam",
                                              f"{ind}_markadapt_mapped_merged_markduplicates_coordsort.bam"),
-                                     bed  = os.path.join(ref_dir, "ref", "intersect_35_90.bed"),
                                      cov  = mean_cov,
                                      out  = consseq_out,
                                      done = os.path.join(outdir(group), "done", jobid_consSeq)))
@@ -508,3 +461,4 @@ for i in range(species_and_refs.shape[0]):
                                          out  = psmc_out,
                                          p    = p_string,
                                          done = os.path.join(outdir(group), "done", jobid_run_psmc)))
+            
