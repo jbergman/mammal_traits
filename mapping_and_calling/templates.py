@@ -40,12 +40,9 @@ job_header = '''
     echo "NODE :" $HOSTNAME
     echo "USER :" $USER
     source ~/.bashrc
-    conda activate ~/GenerationInterval/people/sharedenv/gatkshared
-    echo "CONDA:" $CONDA_DEFAULT_ENV
 '''
 
-default_options = {"cores": 1, 'memory': "8g", 'walltime': "1-00:00:00", 'account': "megaFauna"}
-
+default_options = {"cores": 1, 'memory': "8g", 'walltime': "1-00:00:00", 'account': "mammal_traits"}
 
 """
 ------------------------------------------------------------------------------------------------------------------------
@@ -70,7 +67,7 @@ def mask_reference(input, bed, output, done_prev, done):
     """Mask reference fasta with a BED file of regions to hard-mask."""
     inputs  = [done_prev]
     outputs = [done]
-    options = {"cores": 1, 'memory': "8g", 'walltime': "1-00:00:00", 'account': "megaFauna"}
+    options = default_options.copy()
     spec = job_header + '''
     bedtools maskfasta -fi {input} -bed {bed} -fo {output}
     touch {done}
@@ -82,7 +79,7 @@ def cut_contigs(input, output, min_length, done_prev, done):
     """Make reference fasta with contigs >= min_length bp."""
     inputs  = [done_prev]
     outputs = [done]
-    options = {"cores": 1, 'memory': "8g", 'walltime': "1-00:00:00", 'account': "megaFauna"}
+    options = default_options.copy()
     spec = job_header + '''
     reformat.sh -Xmx8g in={input} out={output} minlength={min_length} overwrite=true
     touch {done}
@@ -97,7 +94,7 @@ def make_fasta(input, done_prev, done):
     """
     inputs  = [done_prev]
     outputs = [done]
-    options = {"cores": 1, 'memory': "16g", 'walltime': "1-00:00:00", 'account': "megaFauna"}
+    options = default_options.copy()
     spec = job_header + '''
     bwa index -a bwtsw {newFasta}
 
@@ -133,93 +130,28 @@ B. SAMPLE DOWNLOAD AND PREPARATION FOR MAPPING
 ------------------------------------------------------------------------------------------------------------------------
 """
 
-def download_pe2(srr, out, done):
-    """Download paired end fastq reads."""
-    inputs  = []
-    outputs = [done]
-    options = {'cores': 1, 'memory': '4g', 'walltime': "48:00:00", 'account': "megaFauna"}
-    spec = job_header + """
-    rm -f {prev_file}
-    wget --progress=dot:giga --timeout=120 --waitretry=60 --tries=10000 --retry-connrefused -P {out} {srr}
-    touch {done}
-    """.format(prev_file=out + srr.split("/")[-1], srr=srr, out=out, done=done)
-    return AnonymousTarget(inputs=inputs, outputs=outputs, options=options, spec=spec)
 
-
-def download_per_individual(group, ind, run_accessions, md5s, outputs_dir, done):
-    """Download paired end fastq reads per individual and verify md5.
-    Passes outputs_dir to download_fastq_per_individual_check_md5.py so it
+def download_per_individual(group, ind, run_accessions, outputs_dir, done):
+    """Download paired end fastq reads per individual .
+    Passes outputs_dir to download_fastq_per_individual.py so it
     can build the correct done-file paths at runtime.
     """
     inputs  = []
     outputs = [done] + [os.path.join(outputs_dir, group, "done",
                          f"download_pe2_{group}_{ra.replace('/', '_')}") for ra in run_accessions.split(",")]
-    options = {'cores': 1, 'memory': '8g', 'walltime': "06:00:00", 'account': "megaFauna"}
+    options = default_options.copy()
     spec = job_header + f"""
-    python {SCRIPTS_DIR}/download_fastq_per_individual_check_md5.py {group} {ind} {run_accessions} {md5s} {outputs_dir}
+    python {SCRIPTS_DIR}/download_fastq_per_individual.py {group} {ind} {run_accessions} {outputs_dir}
     """
     return AnonymousTarget(inputs=inputs, outputs=outputs, options=options, spec=spec)
 
 
-def prefetch(srr, out, done):
-    """Download SRA data via prefetch."""
-    inputs  = []
-    outputs = [done]
-    options = {'cores': 1, 'memory': '4g', 'walltime': "12:00:00", 'account': "megaFauna"}
-    spec = job_header + """
-    cd {out}
-    prefetch --max-size 1t {srr}
-    touch {done}
-    """.format(srr=srr, out=out, done=done)
-    return AnonymousTarget(inputs=inputs, outputs=outputs, options=options, spec=spec)
 
-
-def download_straggler_old(srr, out, done):
-    """Split paired end fastq reads (old method)."""
-    inputs  = []
-    outputs = [done]
-    options = {'cores': 1, 'memory': '4g', 'walltime': "24:00:00", 'account': "megaFauna"}
-    spec = job_header + f"""
-    conda activate workflowMap
-    fastq-dump --split-files --gzip -O {out} {srr}
-    touch {done}
-    """
-    return AnonymousTarget(inputs=inputs, outputs=outputs, options=options, spec=spec)
-
-
-def download_straggler(srr, out, done):
-    """Split paired end fastq reads."""
-    inputs  = []
-    outputs = done
-    options = {'cores': 1, 'memory': '4g', 'walltime': "24:00:00", 'account': "megaFauna"}
-    spec = job_header + f"""
-    conda activate workflowMap
-    fastq-dump --split-files --gzip -O {out} {srr}
-    touch {done[0]} {done[1]}
-    """
-    return AnonymousTarget(inputs=inputs, outputs=outputs, options=options, spec=spec)
-
-
-def split_srr(srr, out, done_prev, done):
-    """Split paired end fastq reads."""
-    inputs  = [done_prev]
-    outputs = [done + "_1.fastq.gz", done + "_2.fastq.gz"]
-    options = {'cores': 1, 'memory': '4g', 'walltime': "24:00:00", 'account': "megaFauna"}
-    spec = job_header + """
-    conda activate workflowMap
-    fastq-dump --gzip --split-files -O {out} {srr}
-    rm {srr}
-    touch {done1}
-    touch {done2}
-    """.format(srr=out + srr, out=out, done1=done + "_1.fastq.gz", done2=done + "_2.fastq.gz")
-    return AnonymousTarget(inputs=inputs, outputs=outputs, options=options, spec=spec)
-
-
-def concatfastqs(group, ind, fastqs_1, fastqs_2, species_outdir, prev_done, done):
+def concatfastqs(ind, fastqs_1, fastqs_2, species_outdir, prev_done, done):
     '''Concatenate fastqs for an individual with multiple run accessions.'''
     inputs  = [prev_done]
     outputs = [done]
-    options = {'cores': 1, 'memory': '8g', 'walltime': "06:00:00", 'account': "megaFauna"}
+    options = default_options.copy()
     spec = job_header + f'''
     out_dir={species_outdir}/fastq
     mkdir -p ${{out_dir}}
@@ -232,11 +164,11 @@ def concatfastqs(group, ind, fastqs_1, fastqs_2, species_outdir, prev_done, done
     return AnonymousTarget(inputs=inputs, outputs=outputs, options=options, spec=spec)
 
 
-def renamefastqs(group, ind, fastq_1, fastq_2, species_outdir, prev_done, done):
+def renamefastqs(ind, fastq_1, fastq_2, species_outdir, prev_done, done):
     '''Rename fastqs for an individual with a single run accession.'''
     inputs  = [prev_done]
     outputs = [done]
-    options = {'cores': 1, 'memory': '8g', 'walltime': "06:00:00", 'account': "megaFauna"}
+    options = default_options.copy()
     spec = job_header + f'''
     out_dir={species_outdir}/fastq
     mkdir -p ${{out_dir}}
@@ -247,11 +179,11 @@ def renamefastqs(group, ind, fastq_1, fastq_2, species_outdir, prev_done, done):
     return AnonymousTarget(inputs=inputs, outputs=outputs, options=options, spec=spec)
 
 
-def makeuBAM(group, ind, fastq1, fastq2, species_outdir, prev_done, done):
+def makeuBAM(ind, fastq1, fastq2, species_outdir, prev_done, done):
     '''Make uBAM file.'''
     inputs  = prev_done
     outputs = [done]
-    options = {"cores": 1, 'memory': "8g", 'walltime': "1-00:00:00", 'account': "megaFauna"}
+    options = default_options.copy()
     spec = job_header + f"""
     mkdir -p {species_outdir}/bam
     picard FastqToSam --FASTQ  {fastq1}                        \\
@@ -266,7 +198,7 @@ def makeuBAM(group, ind, fastq1, fastq2, species_outdir, prev_done, done):
     return AnonymousTarget(inputs=inputs, outputs=outputs, options=options, spec=spec)
 
 
-def splituBAM(group, ind, species_outdir, prev_done, done):
+def splituBAM(ind, species_outdir, prev_done, done):
     '''Split uBAM into shards of 48M reads each.'''
     inputs  = prev_done
     outputs = [done]
@@ -285,24 +217,6 @@ def splituBAM(group, ind, species_outdir, prev_done, done):
     """
     return AnonymousTarget(inputs=inputs, outputs=outputs, options=options, spec=spec)
 
-
-def further_splituBAM(group, ind, shard_path, shard, n_reads, species_outdir, prev_done, done):
-    '''Further split an oversized uBAM shard.'''
-    inputs  = prev_done
-    outputs = [done]
-    options = default_options.copy()
-    spec = job_header + f"""
-    mkdir -p {species_outdir}/bam/split_uBAM{ind}_shard_{shard}
-    picard SplitSamByNumberOfReads -I {shard_path}                                        \\
-                                   -O {species_outdir}/bam/split_uBAM{ind}_shard_{shard}  \\
-                                   --CREATE_INDEX true                                     \\
-                                   -N_READS {n_reads}
-    ls {species_outdir}/bam/split_uBAM{ind}_shard_{shard} | wc -l > {species_outdir}/bam/{ind}_shard_{shard}_nsplitubams.txt
-    touch {done}
-    """
-    return AnonymousTarget(inputs=inputs, outputs=outputs, options=options, spec=spec)
-
-
 """
 ------------------------------------------------------------------------------------------------------------------------
 C. MAPPING
@@ -313,7 +227,7 @@ def shardstr(ishard):
     return (4 - len(str(ishard + 1))) * "0" + str(ishard + 1)
 
 
-def markadapt(group, ind, shard, species_outdir, prev_done, done):
+def markadapt(ind, shard, species_outdir, prev_done, done):
     '''Mark adaptor sequences in a uBAM shard.'''
     inputs  = prev_done
     outputs = [done]
@@ -329,11 +243,11 @@ def markadapt(group, ind, shard, species_outdir, prev_done, done):
     return AnonymousTarget(inputs=inputs, outputs=outputs, options=options, spec=spec)
 
 
-def mapBAM(group, ind, shard, ref, species_outdir, prev_done, done):
+def mapBAM(ind, shard, ref, species_outdir, prev_done, done):
     '''SamToFastq | bwa mem | MergeBamAlignment for a single shard.'''
     inputs  = prev_done
     outputs = [done]
-    options = {"cores": 1, 'memory': "16g", 'walltime': "1-00:00:00", 'account': "megaFauna"}
+    options = default_options.copy()
     spec = job_header + f"""
     picard SamToFastq -I           {species_outdir}/bam/split_uBAM{ind}/shard_{shard}_markadapt.bam  \\
                       --FASTQ      /dev/stdout                                                        \\
@@ -356,11 +270,11 @@ def mapBAM(group, ind, shard, ref, species_outdir, prev_done, done):
     return AnonymousTarget(inputs=inputs, outputs=outputs, options=options, spec=spec)
 
 
-def mergeBAMs(group, ind, bams, species_outdir, prev_done, done):
+def mergeBAMs(ind, bams, species_outdir, prev_done, done):
     '''Merge all mapped shard BAMs into one queryname-sorted BAM per individual.'''
     inputs  = prev_done
     outputs = [done]
-    options = {"cores": 1, 'memory': "16g", 'walltime': "1-00:00:00", 'account': "megaFauna"}
+    options = default_options.copy()
     spec = job_header + f"""
     picard MergeSamFiles {" ".join([f"-I {bam} " for bam in bams])}                           \\
                          -O {species_outdir}/bam/{ind}_markadapt_mapped_merged.bam             \\
@@ -372,42 +286,12 @@ def mergeBAMs(group, ind, bams, species_outdir, prev_done, done):
     return AnonymousTarget(inputs=inputs, outputs=outputs, options=options, spec=spec)
 
 
-def mergeBAMs_custom(bams, output, prev_done, done):
-    '''Merge BAMs with a custom output path.'''
-    inputs  = prev_done
-    outputs = [done]
-    options = {"cores": 1, 'memory': "16g", 'walltime': "24:00:00", 'account': "megaFauna"}
-    spec = job_header + f"""
-    picard MergeSamFiles {" ".join([f"-I {bam} " for bam in bams])}  \\
-                         -O {output}                                   \\
-                         --SORT_ORDER   queryname                      \\
-                         --TMP_DIR      /scratch/$SLURM_JOB_ID
-    touch {done}
-    """
-    return AnonymousTarget(inputs=inputs, outputs=outputs, options=options, spec=spec)
 
-
-def merge_further_split_BAMs(group, ind, bams, shard, species_outdir, prev_done, done):
-    '''Merge sub-shards back into a single shard BAM.'''
-    inputs  = prev_done
-    outputs = [done]
-    options = {"cores": 1, 'memory': "16g", 'walltime': "1-00:00:00", 'account': "megaFauna"}
-    spec = job_header + f"""
-    picard MergeSamFiles {" ".join([f"-I {bam} " for bam in bams])}                                               \\
-                         -O {species_outdir}/bam/split_uBAM{ind}/shard_{shard}_markadapt_mapped.bam              \\
-                         --SORT_ORDER   queryname                                                                  \\
-                         --TMP_DIR      /scratch/$SLURM_JOB_ID
-    rm -f {species_outdir}/bam/split_uBAM{ind}/shard_*_markadapt.bam
-    touch {done}
-    """
-    return AnonymousTarget(inputs=inputs, outputs=outputs, options=options, spec=spec)
-
-
-def markduplicates(group, ind, species_outdir, prev_done, done):
+def markduplicates(ind, species_outdir, prev_done, done):
     '''Mark and remove PCR duplicates.'''
     inputs  = prev_done
     outputs = [done]
-    options = {"cores": 1, 'memory': "16g", 'walltime': "12:00:00", 'account': "megaFauna"}
+    options = default_options.copy()
     spec = job_header + f"""
     picard MarkDuplicates -I {species_outdir}/bam/{ind}_markadapt_mapped_merged.bam                \\
                           -M {species_outdir}/bam/{ind}_markadapt_mapped_merged_markduplicates.txt \\
@@ -423,7 +307,7 @@ def markduplicates(group, ind, species_outdir, prev_done, done):
     return AnonymousTarget(inputs=inputs, outputs=outputs, options=options, spec=spec)
 
 
-def coordsort(group, ind, species_outdir, prev_done, done):
+def coordsort(ind, species_outdir, prev_done, done):
     '''Sort BAM by coordinates and index.'''
     inputs  = prev_done
     outputs = [done]
@@ -440,7 +324,7 @@ def coordsort(group, ind, species_outdir, prev_done, done):
     return AnonymousTarget(inputs=inputs, outputs=outputs, options=options, spec=spec)
 
 
-def cov(group, ind, regions, chromosomes, starts, ends, species_outdir, prev_done, done):
+def cov(ind, regions, chromosomes, starts, ends, species_outdir, prev_done, done):
     '''Get mean coverage per region for a coordinate-sorted BAM.'''
     inputs  = prev_done
     outputs = [done]
@@ -472,7 +356,7 @@ def cov(group, ind, regions, chromosomes, starts, ends, species_outdir, prev_don
     return AnonymousTarget(inputs=inputs, outputs=outputs, options=options, spec=spec)
 
 
-def cov_batched(group, ind, batch, regions, chromosomes, starts, ends, species_outdir, prev_done, done):
+def cov_batched(ind, batch, regions, chromosomes, starts, ends, species_outdir, prev_done, done):
     '''Get mean coverage per region in batches (for very large numbers of contigs).'''
     inputs  = prev_done
     outputs = [done]
@@ -504,29 +388,17 @@ def cov_batched(group, ind, batch, regions, chromosomes, starts, ends, species_o
     return AnonymousTarget(inputs=inputs, outputs=outputs, options=options, spec=spec)
 
 
-def concatenate_cov_files(files, out_file, prev_done, done):
-    '''Concatenate batched coverage files into a single file.'''
-    inputs  = prev_done
-    outputs = [done]
-    options = default_options.copy()
-    spec = job_header + f"""
-    cat {" ".join(files)} > {out_file}
-    touch {done}
-    """
-    return AnonymousTarget(inputs=inputs, outputs=outputs, options=options, spec=spec)
-
 
 """
 ------------------------------------------------------------------------------------------------------------------------
 D. PSMC INFERENCE
 ------------------------------------------------------------------------------------------------------------------------
 """
-
-def get_consSeq(ref, bam, bed, cov, out, done):
+def get_consSeq(ref, bam, cov, out, done):
     """Get consensus fastq for PSMC using samtools mpileup + bcftools call."""
-    inputs  = [bed]
+    inputs  = []
     outputs = [out, done]
-    options = {'cores': 1, 'memory': "40g", 'walltime': "48:00:00", 'account': "megaFauna"}
+    options = default_options.copy()
     spec = job_header + """
     samtools mpileup -A -q 20 -Q 20 -C 50 -R -u -f {ref} {bam} | bcftools call -c -V indels - | vcfutils.pl vcf2fq -d {cov1} -D {cov2} -l 5 | gzip > {out}
     touch {done}
@@ -538,7 +410,7 @@ def make_psmc_input(inp, out, done):
     """Convert diploid fastq to PSMC input (psmcfa) format."""
     inputs  = [inp]
     outputs = [out, done]
-    options = {'cores': 1, 'memory': "10g", 'walltime': "12:00:00", 'account': "megaFauna"}
+    options = default_options.copy()
     spec = job_header + f"""
     fq2psmcfa -q20 {inp} > {out}
     touch {done}
@@ -550,7 +422,7 @@ def run_psmc(inp, out, p, done):
     """Run PSMC with a given atomic-interval configuration string."""
     inputs  = [inp]
     outputs = [out, done]
-    options = {'cores': 1, 'memory': "40g", 'walltime': "06:00:00", 'account': "megaFauna"}
+    options = default_options.copy()
     spec = job_header + f"""
     psmc -p "{p}" -o {out} {inp}
     touch {done}
