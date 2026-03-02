@@ -23,7 +23,7 @@ mammal_traits/
 
 ### `mapping_and_PSMC/`
 
-Python scripts for estimating *N*e trajectories using the **Pairwise Sequentially Markovian Coalescent (PSMC)** method. This includes:
+[GWF](https://gwf.app/) pipeline for estimating *N*e trajectories using the **Pairwise Sequentially Markovian Coalescent (PSMC)** method. This includes:
 
 - Short-read data acquisition and quality control
 - Read mapping to reference genomes
