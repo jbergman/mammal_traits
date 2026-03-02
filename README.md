@@ -55,8 +55,3 @@ If you use this code, please cite:
 > Bergman J, Pedersen RØ, Lundgren EJ, Trepel J, Pearce EA, Czyżewski S, Tietje M, Lemoine RT, Coll Macià M, Schierup MH, Svenning J-C.Trade-offs beget trade-offs: Causal analysis of mammalian population dynamics. https://www.biorxiv.org/content/10.1101/2024.08.16.608243v1.
 
 ---
-
-## Contact
-
-Juraj Bergman — Center for Ecological Dynamics in a Novel Biosphere (ECONOVO), Department of Biology, Aarhus University & Bioinformatics Research Centre, Aarhus University.
-
